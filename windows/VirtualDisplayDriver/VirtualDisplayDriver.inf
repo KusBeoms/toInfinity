@@ -3,7 +3,9 @@
 ;
 ; Installs a single root-enumerated software device (no physical hardware
 ; match) that registers a fixed-mode (1920x1080@60) Indirect Display driver
-; with the Windows Indirect Display Driver class extension (IddCx).
+; with the Windows Indirect Display Driver class extension (IddCx). IddCx is
+; a UMDF2 (user-mode) technology, so the driver binary is a DLL hosted by
+; WUDFHost.exe, not a kernel-mode .sys.
 ;
 ; Install with (elevated, test-signing mode ON, after reboot):
 ;   pnputil /add-driver VirtualDisplayDriver.inf /install
@@ -44,16 +46,20 @@ Include = IddCx.inf
 Needs   = IddCx.NT.CoInstallers
 
 [VirtualDisplayDriver_Install.NT.Wdf]
-KmdfService = VirtualDisplayDriver, VirtualDisplayDriver_wdfsect
+UmdfService              = VirtualDisplayDriver, VirtualDisplayDriver_Install
+UmdfServiceOrder         = VirtualDisplayDriver
+UmdfKernelModeClientPolicy = AllowKernelModeClients
+UmdfFileObjectPolicy     = AllowNullAndUnknownFileObjects
 
-[VirtualDisplayDriver_wdfsect]
-KmdfLibraryVersion = $KMDFVERSION$
+[VirtualDisplayDriver_Install]
+UmdfLibraryVersion = $UMDFVERSION$
+ServiceBinary       = %13%\VirtualDisplayDriver.dll
 
 [SourceDisksNames]
 1 = %DiskName%,,,""
 
 [SourceDisksFiles]
-VirtualDisplayDriver.sys = 1
+VirtualDisplayDriver.dll = 1
 
 [DestinationDirs]
 DefaultDestDir = 13 ; %windir%\System32\DriverStore\FileRepository (driver package dest)

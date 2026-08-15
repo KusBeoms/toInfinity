@@ -86,14 +86,57 @@ IddSampleDeviceAdd(
     new (deviceContext) IndirectDeviceContext();
     deviceContext->WdfDevice = device;
 
-    // --- Finish IddCx device creation: this is what actually surfaces the
-    // adapter object we'll finish initializing in
-    // EvtIddCxAdapterInitFinished. ---
     status = IddCxDeviceInitialize(device);
     if (!NT_SUCCESS(status))
     {
         return status;
     }
+
+    // --- Kick off adapter creation. Unlike device creation, IddCx does not
+    // create the WDDM adapter object implicitly; the driver must call
+    // IddCxAdapterInitAsync itself. The AdapterObject handle comes back
+    // synchronously in pOutArgs, but initialization completion (and the
+    // rest of this driver's setup, i.e. creating the fixed-mode monitor) is
+    // reported later via EvtIddCxAdapterInitFinished. That callback only
+    // receives the IDDCX_ADAPTER handle, and IddCx has no
+    // IddCxAdapterGetWdfDevice() API to map back to our WDFDEVICE, so we
+    // attach an IndirectAdapterContext to the adapter object here (via
+    // ObjectAttributes) that back-points to this device's context. ---
+    static const IDDCX_ENDPOINT_VERSION kEndpointVersion = { sizeof(IDDCX_ENDPOINT_VERSION), 1, 0, 0, 0 };
+
+    IDDCX_ADAPTER_CAPS adapterCaps = {};
+    adapterCaps.Size = sizeof(adapterCaps);
+    adapterCaps.MaxMonitorsSupported = 1;
+    adapterCaps.MaxDisplayPipelineRate =
+        static_cast<UINT64>(ToInfinityDisplay::kDisplayWidth) *
+        ToInfinityDisplay::kDisplayHeight *
+        ToInfinityDisplay::kDisplayRefreshHz;
+    adapterCaps.EndPointDiagnostics.Size = sizeof(adapterCaps.EndPointDiagnostics);
+    adapterCaps.EndPointDiagnostics.TransmissionType = IDDCX_TRANSMISSION_TYPE_NETWORK_OTHER;
+    adapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"toInfinity Virtual Display Adapter";
+    adapterCaps.EndPointDiagnostics.pEndPointModelName = L"toInfinity Virtual Display";
+    adapterCaps.EndPointDiagnostics.pEndPointManufacturerName = L"toInfinity";
+    adapterCaps.EndPointDiagnostics.pHardwareVersion = const_cast<IDDCX_ENDPOINT_VERSION*>(&kEndpointVersion);
+    adapterCaps.EndPointDiagnostics.pFirmwareVersion = const_cast<IDDCX_ENDPOINT_VERSION*>(&kEndpointVersion);
+    adapterCaps.EndPointDiagnostics.GammaSupport = IDDCX_FEATURE_IMPLEMENTATION_NONE;
+
+    WDF_OBJECT_ATTRIBUTES adapterAttributes;
+    WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&adapterAttributes, IndirectAdapterContext);
+
+    IDARG_IN_ADAPTER_INIT adapterInitIn = {};
+    adapterInitIn.WdfDevice = device;
+    adapterInitIn.pCaps = &adapterCaps;
+    adapterInitIn.ObjectAttributes = &adapterAttributes;
+
+    IDARG_OUT_ADAPTER_INIT adapterInitOut = {};
+    status = IddCxAdapterInitAsync(&adapterInitIn, &adapterInitOut);
+    if (!NT_SUCCESS(status))
+    {
+        return status;
+    }
+
+    IndirectAdapterContext* adapterContext = AdapterGetContext(adapterInitOut.AdapterObject);
+    adapterContext->DeviceContext = deviceContext;
 
     return STATUS_SUCCESS;
 }
@@ -129,8 +172,8 @@ IddSampleAdapterInitFinished(
         return pInArgs->AdapterInitStatus;
     }
 
-    WDFDEVICE wdfDevice = IddCxAdapterGetWdfDevice(AdapterObject);
-    IndirectDeviceContext* deviceContext = DeviceGetContext(wdfDevice);
+    IndirectAdapterContext* adapterContext = AdapterGetContext(AdapterObject);
+    IndirectDeviceContext* deviceContext = adapterContext->DeviceContext;
     deviceContext->IddAdapter = AdapterObject;
 
     // Register our single fixed-mode monitor now that the adapter is ready.
@@ -214,11 +257,12 @@ CreateFixedModeMonitor(
     }
 
     // Tell IddCx the monitor is plugged in / connected so Windows enumerates
-    // it as an active display.
-    IDARG_IN_MONITORARRIVAL arrivalArgs = {};
-    arrivalArgs.MonitorObject = monitor;
+    // it as an active display. IddCxMonitorArrival takes no input args
+    // beyond the monitor handle itself -- the out args are informational
+    // (LUID/target id) for companion apps and aren't needed here.
+    IDARG_OUT_MONITORARRIVAL arrivalOut = {};
 
-    status = IddCxMonitorArrival(monitor, &arrivalArgs);
+    status = IddCxMonitorArrival(monitor, &arrivalOut);
     return status;
 }
 
@@ -261,18 +305,21 @@ IddSampleMonitorGetDefaultModes(
     RtlZeroMemory(mode, sizeof(*mode));
     mode->Size = sizeof(*mode);
     mode->Origin = IDDCX_MONITOR_MODE_ORIGIN_MONITORDESCRIPTOR;
-    mode->MonitorVideoSignalInfo.ActiveSize.cx = ToInfinityDisplay::kDisplayWidth;
-    mode->MonitorVideoSignalInfo.ActiveSize.cy = ToInfinityDisplay::kDisplayHeight;
-    mode->MonitorVideoSignalInfo.TotalSize.cx  = ToInfinityDisplay::kDisplayWidth;
-    mode->MonitorVideoSignalInfo.TotalSize.cy  = ToInfinityDisplay::kDisplayHeight;
-    mode->MonitorVideoSignalInfo.VSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz;
-    mode->MonitorVideoSignalInfo.VSyncFreq.Denominator = 1;
-    mode->MonitorVideoSignalInfo.HSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz * ToInfinityDisplay::kDisplayHeight;
-    mode->MonitorVideoSignalInfo.HSyncFreq.Denominator = 1;
-    mode->MonitorVideoSignalInfo.PixelRate = static_cast<UINT64>(ToInfinityDisplay::kDisplayWidth) *
+    mode->MonitorVideoSignalInfo.activeSize.cx = ToInfinityDisplay::kDisplayWidth;
+    mode->MonitorVideoSignalInfo.activeSize.cy = ToInfinityDisplay::kDisplayHeight;
+    mode->MonitorVideoSignalInfo.totalSize.cx  = ToInfinityDisplay::kDisplayWidth;
+    mode->MonitorVideoSignalInfo.totalSize.cy  = ToInfinityDisplay::kDisplayHeight;
+    mode->MonitorVideoSignalInfo.vSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz;
+    mode->MonitorVideoSignalInfo.vSyncFreq.Denominator = 1;
+    mode->MonitorVideoSignalInfo.hSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz * ToInfinityDisplay::kDisplayHeight;
+    mode->MonitorVideoSignalInfo.hSyncFreq.Denominator = 1;
+    mode->MonitorVideoSignalInfo.pixelRate = static_cast<UINT64>(ToInfinityDisplay::kDisplayWidth) *
                                               ToInfinityDisplay::kDisplayHeight *
                                               ToInfinityDisplay::kDisplayRefreshHz;
-    mode->MonitorVideoSignalInfo.ScanLineOrdering = DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE;
+    // Per IDDCX_MONITOR_MODE docs, AdditionalSignalInfo.vSyncFreqDivider
+    // must be zero for a *monitor* mode (as opposed to a target mode).
+    mode->MonitorVideoSignalInfo.AdditionalSignalInfo.vSyncFreqDivider = 0;
+    mode->MonitorVideoSignalInfo.scanLineOrdering = DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE;
 
     pOutArgs->DefaultMonitorModeBufferOutputCount = 1;
     pOutArgs->PreferredMonitorModeIdx = 0;
@@ -303,19 +350,27 @@ IddSampleMonitorQueryTargetModes(
     IDDCX_TARGET_MODE* mode = &pInArgs->pTargetModes[0];
     RtlZeroMemory(mode, sizeof(*mode));
     mode->Size = sizeof(*mode);
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.ActiveSize.cx = ToInfinityDisplay::kDisplayWidth;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.ActiveSize.cy = ToInfinityDisplay::kDisplayHeight;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.TotalSize.cx  = ToInfinityDisplay::kDisplayWidth;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.TotalSize.cy  = ToInfinityDisplay::kDisplayHeight;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.VSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.VSyncFreq.Denominator = 1;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.PixelRate =
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.activeSize.cx = ToInfinityDisplay::kDisplayWidth;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.activeSize.cy = ToInfinityDisplay::kDisplayHeight;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.totalSize.cx  = ToInfinityDisplay::kDisplayWidth;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.totalSize.cy  = ToInfinityDisplay::kDisplayHeight;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.vSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.vSyncFreq.Denominator = 1;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.hSyncFreq.Numerator   = ToInfinityDisplay::kDisplayRefreshHz * ToInfinityDisplay::kDisplayHeight;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.hSyncFreq.Denominator = 1;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.pixelRate =
         static_cast<UINT64>(ToInfinityDisplay::kDisplayWidth) *
         ToInfinityDisplay::kDisplayHeight *
         ToInfinityDisplay::kDisplayRefreshHz;
-    mode->TargetVideoSignalInfo.TargetVideoSignalInfo.ScanLineOrdering = DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE;
-    mode->TargetVideoSignalInfo.ColorFormat = DISPLAYCONFIG_COLOR_ENCODING_RGB;
-    mode->TargetVideoSignalInfo.BitsPerColorChannel = 8;
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.scanLineOrdering = DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE;
+    // Per IDDCX_TARGET_MODE docs, AdditionalSignalInfo.vSyncFreqDivider
+    // cannot be zero for a target mode (it divides vSyncFreq down to get
+    // the OS desktop update rate); 1 means "update every vsync", i.e. the
+    // full 60Hz rate.
+    mode->TargetVideoSignalInfo.targetVideoSignalInfo.AdditionalSignalInfo.vSyncFreqDivider = 1;
+    // NOTE: DISPLAYCONFIG_TARGET_MODE has no color-format/bit-depth fields
+    // in this IddCx version (no ColorFormat/BitsPerColorChannel members) --
+    // color format is negotiated elsewhere (swap-chain format), not here.
 
     pOutArgs->TargetModeBufferOutputCount = 1;
 

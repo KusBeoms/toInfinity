@@ -11,13 +11,17 @@
 //
 #pragma once
 
+// IddCx is a UMDF2 (User-Mode Driver Framework) technology only -- there is
+// no KMDF/kernel-mode variant. IddCx.h itself is documented "Environment:
+// User-mode Driver Framework" and pulls in Dxgi.h/d3d11_4.h (user-mode-only
+// DirectX headers). That means this driver runs as ordinary user-mode code
+// hosted by WUDFHost.exe, so <windows.h> and the STL below are both valid
+// and the correct choice (not a kernel-mode violation) -- unlike a real
+// KMDF/ntddk.h driver, which could never include either.
 #include <windows.h>
-#include <wudfwdm.h>
 #include <wdf.h>
 #include <iddcx.h>
 
-#include <memory>
-#include <vector>
 #include <mutex>
 
 // ---------------------------------------------------------------------------
@@ -70,6 +74,22 @@ struct IndirectDeviceContext
 };
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(IndirectDeviceContext, DeviceGetContext)
+
+// ---------------------------------------------------------------------------
+// Per-adapter context. IddCxAdapterInitAsync() (unlike device creation)
+// hands back the IDDCX_ADAPTER handle synchronously but only tells us
+// whether init *finished* asynchronously via EvtIddCxAdapterInitFinished --
+// which receives the IDDCX_ADAPTER handle but not the owning WDFDEVICE.
+// There is no IddCxAdapterGetWdfDevice() API, so we thread a back-pointer to
+// the owning IndirectDeviceContext through the adapter's own WDF context
+// instead (set right after IddCxAdapterInitAsync returns the handle).
+// ---------------------------------------------------------------------------
+struct IndirectAdapterContext
+{
+    IndirectDeviceContext* DeviceContext = nullptr;
+};
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(IndirectAdapterContext, AdapterGetContext)
 
 // ---------------------------------------------------------------------------
 // Per-monitor context. IddCx also supports attaching a context to the

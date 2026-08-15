@@ -1,10 +1,18 @@
 # Windows test-signing setup — toInfinity VirtualDisplayDriver
 
-The `VirtualDisplayDriver` is an unsigned (dev-built) kernel-mode IddCx
-driver. Windows only loads unsigned kernel drivers when the machine is in
+The `VirtualDisplayDriver` is an unsigned (dev-built) UMDF2 IddCx driver
+(IddCx is a user-mode-only technology — there is no kernel-mode IddCx
+variant — so the driver binary is a DLL hosted by `WUDFHost.exe`, not a
+`.sys`). Windows only loads unsigned drivers when the machine is in
 **test-signing mode**. This document is the exact, step-by-step procedure to
 build (on a machine with WDK installed), install, verify, and later remove
 the driver.
+
+As of this revision the project has been verified to actually compile and
+link cleanly (0 errors, 0 warnings) with MSBuild + Visual Studio 2022 + WDK
+10.0.22621.0 — see `docs/ARCHITECTURE.md`. Everything below this point
+(test-signing, install, Device Manager verification) still requires a real
+Windows machine with a reboot and has not been exercised in that sandbox.
 
 > Test-signing mode weakens the kernel driver signing requirement for the
 > whole machine. Only enable it on a machine you control, and turn it back
@@ -28,7 +36,7 @@ From a WDK-enabled Visual Studio Developer Command Prompt:
 msbuild windows\VirtualDisplayDriver\VirtualDisplayDriver.vcxproj /p:Configuration=Release /p:Platform=x64
 ```
 
-This produces `VirtualDisplayDriver.sys`, `VirtualDisplayDriver.inf`, and a
+This produces `VirtualDisplayDriver.dll`, `VirtualDisplayDriver.inf`, and a
 `.cat` catalog file under the build output directory
 (`x64\Release\VirtualDisplayDriver\`).
 

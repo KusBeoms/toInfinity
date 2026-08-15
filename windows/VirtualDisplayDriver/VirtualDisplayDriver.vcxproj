@@ -2,16 +2,25 @@
 <!--
   VirtualDisplayDriver.vcxproj
 
-  WDK KMDF driver project for the ToInfinity IddCx virtual display
+  WDK UMDF2 driver project for the ToInfinity IddCx virtual display
   driver. Requires Visual Studio + the Windows Driver Kit (WDK) matching
   the installed Windows SDK, with the "Windows Driver Kit" and
   "Desktop development with C++" workloads installed.
 
-  This sandbox has no WDK/MSBuild driver tooling available, so this project
-  could NOT be built/validated by msbuild in this session. It was written
-  to match the standard WDK KMDF driver project shape (Configuration.Type
-  = Driver, DriverType = KMDF, TargetVersion = Windows10) as closely as
-  possible from documented conventions.
+  IMPORTANT: IddCx (the Indirect Display Driver Class Extension) is a
+  User-Mode Driver Framework (UMDF2) technology ONLY; Microsoft never
+  shipped a KMDF/kernel-mode variant. IddCx.h itself is documented
+  "Environment: User-mode Driver Framework" and pulls in Dxgi.h/d3d11_4.h,
+  which are user-mode-only DirectX headers; the WDK ships iddcxstub.lib
+  only under Lib\ver\um\arch\iddcx, never under a km path. An earlier
+  revision of this project set DriverType=KMDF, which is not just
+  suboptimal but impossible for IddCx to link against; that is what was
+  crashing the front-end compiler (mixing windows.h/STL against a
+  _KERNEL_MODE-defined kernel compile). This project now correctly builds
+  as ConfigurationType=Driver, DriverType=UMDF (Configuration.Type equals
+  Driver, DriverType equals UMDF, TargetVersion equals Windows10), which is
+  the only configuration IddCx actually supports. Verified building clean
+  with MSBuild + WDK 10.0.22621.0.
 -->
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
@@ -29,7 +38,7 @@
     <ProjectGuid>{6E9F1A2B-6B7A-4B2E-9E7A-1F0D3C4E5A6B}</ProjectGuid>
     <RootNamespace>VirtualDisplayDriver</RootNamespace>
     <Platform>x64</Platform>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
     <Configuration>Debug</Configuration>
     <TargetName>VirtualDisplayDriver</TargetName>
   </PropertyGroup>
@@ -38,34 +47,72 @@
 
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Driver</ConfigurationType>
-    <DriverType>KMDF</DriverType>
+    <DriverType>UMDF</DriverType>
+    <UMDF_VERSION_MAJOR>2</UMDF_VERSION_MAJOR>
+    <UMDF_VERSION_MINOR>33</UMDF_VERSION_MINOR>
     <DriverTargetPlatform>Universal</DriverTargetPlatform>
-    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <PlatformToolset>WindowsUserModeDriver10.0</PlatformToolset>
     <UseDebugLibraries>false</UseDebugLibraries>
     <TargetVersion>Windows10</TargetVersion>
-    <SpectreMitigation>Spectre</SpectreMitigation>
+    <Driver_SpectreMitigation>false</Driver_SpectreMitigation>
+    <!-- UMDF drivers are DLLs hosted by WUDFHost.exe (unlike KMDF's .sys,
+         which the WDK's WindowsDriver.KernelMode.props sets up
+         automatically via LinkCompiled/TargetExt/OutputType for
+         ConfigurationType==Driver). There is no equivalent
+         WindowsDriver.UserMode props doing this for UMDF in this WDK, so
+         without setting these explicitly the generic MSBuild fallback
+         silently skips the real link step and produces a stray .exe stub
+         instead of linking our .dll. -->
+    <LinkCompiled>true</LinkCompiled>
+    <TargetExt>.dll</TargetExt>
+    <OutputType>library</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\wdf.props" />
-  </ImportGroup>
+
+  <!-- WindowsDriver.UserMode.props (imported above, via the WDK chain)
+       unconditionally sets EnableTestSign=true, which makes every build
+       invoke signtool against a local test certificate. That is a
+       machine-setup / install-time concern (see
+       docs/SETUP_WINDOWS_TESTSIGNING.md), not something this headless
+       build should require; without a configured test cert, signtool
+       fails and takes the whole build down with it. Compiling and linking
+       is the contract of msbuild /t:Build; signing the output is a
+       separate, later step. -->
+  <PropertyGroup>
+    <EnableTestSign>false</EnableTestSign>
+    <!-- Match the linker's real .dll output so DoLinkOutputFilesMatch
+         doesn't warn: the WDK's driver TargetPath computation doesn't
+         pick up the TargetExt override above. -->
+    <TargetPath>$(OutDir)$(TargetName)$(TargetExt)</TargetPath>
+  </PropertyGroup>
 
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(DDK_INC_PATH);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- IddCx.h/iddcxstub.lib are versioned WDK components that live
+           under um\iddcx\<ver> in the Windows SDK/WDK tree, outside the
+           set of directories the UMDF platform toolset wires in
+           automatically, so they need to be added explicitly. -->
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um\iddcx\1.4;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>IDDCX_VERSION_MAJOR=1;IDDCX_VERSION_MINOR=4;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>IddCx.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <Driver>Driver</Driver>
-      <SubSystem>Native</SubSystem>
+      <AdditionalLibraryDirectories>$(WindowsSdkDir)Lib\$(WindowsTargetPlatformVersion)\um\$(Platform)\iddcx\1.4;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>iddcxstub.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- ConfigurationType stays "Driver" (needed for Inf/StampInf/driver
+           signing processing), which means the normal ConfigurationType==
+           DynamicLibrary import of Microsoft.Cpp.WinDLL.props (the thing
+           that would otherwise set this for us) never happens; a UMDF
+           driver is still a plain Win32 DLL under the hood, so set it by
+           hand instead. -->
+      <LinkDLL>true</LinkDLL>
+      <SubSystem>Windows</SubSystem>
     </Link>
     <Inf>
       <OutputBaseFilename>VirtualDisplayDriver.inf</OutputBaseFilename>
@@ -83,7 +130,4 @@
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\wdf.targets" />
-  </ImportGroup>
 </Project>

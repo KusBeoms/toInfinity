@@ -73,7 +73,7 @@ Full byte-level detail: [protocol/SPEC.md](../protocol/SPEC.md).
 | `protocol/SPEC.md` | Wire format — source of truth for every implementation |
 | `protocol/csharp/` | C# protocol codec, used by both Windows apps |
 | `protocol/swift/` | Swift protocol codec, used by both Mac apps |
-| `windows/VirtualDisplayDriver/` | IddCx kernel-mode driver (WDK project) |
+| `windows/VirtualDisplayDriver/` | IddCx driver (WDK/UMDF2 project) |
 | `windows/HostAgent/` | .NET worker service: capture, encode, stream, inject |
 | `windows/ClientViewer/` | WPF app: discover, connect, render, capture input |
 | `windows/IntegrationTests/` | Loopback socket tests exercising the real wire protocol |
@@ -83,9 +83,12 @@ Full byte-level detail: [protocol/SPEC.md](../protocol/SPEC.md).
 | `docs/SETUP_WINDOWS_TESTSIGNING.md` | How to install the unsigned driver for local testing |
 
 ## What's verified vs. what needs real hardware
-This project was built in a sandboxed Windows environment with the .NET SDK
-but no WDK driver tooling and no macOS/Xcode at all. What that means
-concretely:
+This project was originally written in a sandboxed Windows environment with
+the .NET SDK but no WDK driver tooling and no macOS/Xcode at all; a later
+session added a full Visual Studio 2022 + WDK toolchain, so
+`windows/VirtualDisplayDriver` now actually compiles and links instead of
+being reviewed by eye only. macOS/Xcode is still unavailable. What that
+means concretely:
 
 | Piece | Verified here | Needs real hardware |
 |---|---|---|
@@ -93,8 +96,21 @@ concretely:
 | Protocol codec (Swift) | Manual review only | Build + run on macOS |
 | Windows loopback socket round trip (handshake, video framing, input, discovery) | ✅ 4 integration tests pass over real TCP/UDP loopback | — |
 | `windows/HostAgent` + `windows/ClientViewer` | ✅ `dotnet build` clean, 0 warnings | Real DXGI capture + `SendInput` injection against an actual virtual display |
-| `windows/VirtualDisplayDriver` | Manual correctness review only | WDK build, test-signing install, Device Manager verification |
+| `windows/VirtualDisplayDriver` | ✅ `msbuild` clean, 0 errors/0 warnings; produces a real, IddCx-ApiValidator-passing `VirtualDisplayDriver.dll` + signed-shape `.cat`/`.inf` package | Test-signing install (needs a configured test cert + reboot), Device Manager verification, actual DXGI capture against the resulting virtual monitor |
 | `mac/*` (all three components) | Manual correctness review only | Xcode build, `CGVirtualDisplay` creation, ScreenCaptureKit capture, CGEvent injection |
+
+Note on `windows/VirtualDisplayDriver`: it was originally written (and
+mistakenly documented) as a KMDF/kernel-mode project. IddCx — the Indirect
+Display Driver Class Extension — is UMDF2-only; Microsoft never shipped a
+kernel-mode variant (`IddCx.h` itself pulls in user-mode-only DirectX headers
+like `Dxgi.h`/`d3d11_4.h`, and the WDK only ships `iddcxstub.lib` under a
+`um\` path, never `km\`). That mismatch is what caused an internal compiler
+error the first time this was built for real. The project now correctly
+targets `ConfigurationType=Driver`, `DriverType=UMDF`, builds as a DLL hosted
+by `WUDFHost.exe`, and links/packages cleanly. It still cannot be *installed*
+without test-signing enabled and a reboot, and its actual video-frame
+behavior (draining the IddCx swap-chain, exposing the monitor to DXGI
+Desktop Duplication) has not been exercised against a real Windows session.
 
 ## Known gaps / next steps (explicitly out of MVP scope)
 - **Codec**: JPEG-over-TCP only. H.264/H.265 hardware encode is the
