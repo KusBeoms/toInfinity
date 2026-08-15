@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist for the ClientViewer app target.
+
+  This file documents the Info.plist keys an Xcode "App" target wrapping
+  Sources/ClientViewer would need. A raw SwiftPM executable product does
+  not consume Info.plist automatically the way an .app bundle does; when
+  this package is imported into an Xcode project as an App target, copy
+  these keys into that target's generated Info.plist (or point Xcode's
+  "Info.plist File" build setting at this file directly).
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>toInfinity</string>
+    <key>CFBundleDisplayName</key>
+    <string>toInfinity</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.toinfinity.clientviewer</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleExecutable</key>
+    <string>ClientViewer</string>
+
+    <!-- Regular foreground app: Dock icon + menu bar, not a background agent. -->
+    <key>LSUIElement</key>
+    <false/>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+
+    <!--
+      Local network access (discovery UDP broadcast/receive, TCP control +
+      video connections to a HostAgent on the LAN) requires the Local
+      Network usage-description prompt on macOS 15+ (Sonoma continued the
+      iOS-style prompt for Mac apps making local-subnet connections).
+    -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>toInfinity needs local network access to discover and connect to other machines offering a shared display on your network.</string>
+
+    <!--
+      Bonjour service type, present for forward-compatibility with the
+      documented-but-not-yet-implemented mDNS discovery fast-follow (see
+      DiscoveryClient.swift / ../../PROTOCOL_ASSUMPTIONS.md). Not required
+      for the UDP-broadcast discovery implemented today.
+    -->
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_toinfinity._tcp</string>
+    </array>
+
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-HostAgent-ToInfinity</UserSecretsId>
+    <RootNamespace>ToInfinity.HostAgent</RootNamespace>
+    <AssemblyName>ToInfinity.HostAgent</AssemblyName>
+    <Platforms>x64</Platforms>
+    <UseWindowsForms>false</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DXGI / Direct3D11 interop for Desktop Duplication API capture.
+         Chosen over hand-rolled P/Invoke: Vortice.Windows gives typed,
+         maintained COM interop for DXGI/D3D11 (source-generated, MIT
+         licensed) so the Desktop Duplication capture path doesn't need
+         hundreds of lines of hand-written COM vtable P/Invoke glue. -->
+    <PackageReference Include="Vortice.DXGI" Version="3.6.2" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.6.2" />
+
+    <!-- JPEG encoding of captured frames. System.Drawing.Common is used
+         here (not a cross-platform encoder) because HostAgent is
+         Windows-only (net8.0-windows, uses DXGI + SendInput) and
+         System.Drawing.Common's GDI+-backed JPEG encoder is the simplest
+         built-in option in that context; no portability requirement is
+         lost since this project never runs off Windows. -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\protocol\csharp\ToInfinity.Protocol\ToInfinity.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

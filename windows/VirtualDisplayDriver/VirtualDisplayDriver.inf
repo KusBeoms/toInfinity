@@ -1,0 +1,64 @@
+;
+; VirtualDisplayDriver.inf - INF for ToInfinity IddCx virtual display driver
+;
+; Installs a single root-enumerated software device (no physical hardware
+; match) that registers a fixed-mode (1920x1080@60) Indirect Display driver
+; with the Windows Indirect Display Driver class extension (IddCx).
+;
+; Install with (elevated, test-signing mode ON, after reboot):
+;   pnputil /add-driver VirtualDisplayDriver.inf /install
+;   devcon.exe install VirtualDisplayDriver.inf Root\ToInfinityIddDriver
+;
+; See /docs/SETUP_WINDOWS_TESTSIGNING.md for full walkthrough.
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = Display
+ClassGuid   = {4d36e968-e325-11ce-bfc1-08002be10318}
+Provider    = %ManufacturerName%
+CatalogFile = VirtualDisplayDriver.cat
+DriverVer   = 01/01/2026,1.0.0.0
+PnpLockdown = 1
+
+[Manufacturer]
+%ManufacturerName% = ToInfinity, NT$ARCH$
+
+[ToInfinity.NT$ARCH$]
+%DeviceDesc% = VirtualDisplayDriver_Install, Root\ToInfinityIddDriver
+
+[VirtualDisplayDriver_Install.NT]
+Include = IddCx.inf
+Needs   = IddCx.NT
+
+[VirtualDisplayDriver_Install.NT.hw]
+Include = IddCx.inf
+Needs   = IddCx.NT.HW
+
+[VirtualDisplayDriver_Install.NT.Services]
+Include = IddCx.inf
+Needs   = IddCx.NT.Services
+
+[VirtualDisplayDriver_Install.NT.CoInstallers]
+Include = IddCx.inf
+Needs   = IddCx.NT.CoInstallers
+
+[VirtualDisplayDriver_Install.NT.Wdf]
+KmdfService = VirtualDisplayDriver, VirtualDisplayDriver_wdfsect
+
+[VirtualDisplayDriver_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+VirtualDisplayDriver.sys = 1
+
+[DestinationDirs]
+DefaultDestDir = 13 ; %windir%\System32\DriverStore\FileRepository (driver package dest)
+
+[Strings]
+ManufacturerName = "toInfinity"
+DeviceDesc       = "toInfinity Virtual Display Adapter"
+DiskName         = "toInfinity Virtual Display Installation Disk"

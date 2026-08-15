@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  VirtualDisplayDriver.vcxproj
+
+  WDK KMDF driver project for the ToInfinity IddCx virtual display
+  driver. Requires Visual Studio + the Windows Driver Kit (WDK) matching
+  the installed Windows SDK, with the "Windows Driver Kit" and
+  "Desktop development with C++" workloads installed.
+
+  This sandbox has no WDK/MSBuild driver tooling available, so this project
+  could NOT be built/validated by msbuild in this session. It was written
+  to match the standard WDK KMDF driver project shape (Configuration.Type
+  = Driver, DriverType = KMDF, TargetVersion = Windows10) as closely as
+  possible from documented conventions.
+-->
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6E9F1A2B-6B7A-4B2E-9E7A-1F0D3C4E5A6B}</ProjectGuid>
+    <RootNamespace>VirtualDisplayDriver</RootNamespace>
+    <Platform>x64</Platform>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <Configuration>Debug</Configuration>
+    <TargetName>VirtualDisplayDriver</TargetName>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <TargetVersion>Windows10</TargetVersion>
+    <SpectreMitigation>Spectre</SpectreMitigation>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\wdf.props" />
+  </ImportGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DDK_INC_PATH);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>IddCx.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <Driver>Driver</Driver>
+      <SubSystem>Native</SubSystem>
+    </Link>
+    <Inf>
+      <OutputBaseFilename>VirtualDisplayDriver.inf</OutputBaseFilename>
+    </Inf>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClInclude Include="Driver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Driver.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="VirtualDisplayDriver.inf" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\wdf.targets" />
+  </ImportGroup>
+</Project>

@@ -1,0 +1,28 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# Visual Studio / WDK
+.vs/
+*.vcxproj.user
+Debug/
+Release/
+x64/
+x86/
+ARM64/
+
+# Swift / Xcode
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OMC state
+.omc/

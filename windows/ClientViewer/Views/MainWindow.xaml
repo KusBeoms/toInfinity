@@ -1,0 +1,32 @@
+<Window x:Class="ToInfinity.ClientViewer.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="toInfinity — Client" Height="600" Width="900"
+        Background="#1e1e1e">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Discovery / connect panel -->
+        <StackPanel x:Name="ConnectPanel" Grid.Row="0" Orientation="Vertical" Margin="12">
+            <TextBlock Text="Discovered hosts" Foreground="White" FontWeight="Bold" Margin="0,0,0,6" />
+            <ListBox x:Name="HostListBox" Height="140" DisplayMemberPath="." />
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="PIN:" Foreground="White" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox x:Name="PinTextBox" Width="100" MaxLength="6" />
+                <Button x:Name="ConnectButton" Content="Connect" Margin="12,0,0,0" Click="OnConnectClick" />
+                <Button x:Name="RefreshButton" Content="Refresh" Margin="8,0,0,0" Click="OnRefreshClick" />
+                <TextBlock x:Name="StatusText" Foreground="LightGray" Margin="16,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Remote frame display -->
+        <Grid Grid.Row="1" Background="Black">
+            <Image x:Name="RemoteFrameImage"
+                   Stretch="Uniform"
+                   Focusable="True" />
+        </Grid>
+    </Grid>
+</Window>
